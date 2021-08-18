@@ -24,8 +24,11 @@ class JobPoller:
         self.stop_event = asyncio.Event()
 
     async def poll(self):
-        while self.should_poll():
-            await self.poll_once()
+        while self.should_continue():
+            if self.should_poll():
+                await self.poll_once()
+            else:
+                await asyncio.sleep(0.2)
 
     async def poll_once(self):
         try:
@@ -51,9 +54,12 @@ class JobPoller:
             )
             await asyncio.sleep(5)
 
-    def should_poll(self) -> bool:
+    def should_continue(self) -> bool:
         return not self.stop_event.is_set() \
-            and (self.zeebe_adapter.connected or self.zeebe_adapter.retrying_connection) \
+            and (self.zeebe_adapter.connected or self.zeebe_adapter.retrying_connection)
+
+    def should_poll(self) -> bool:
+        return self.should_continue() \
             and self.calculate_max_jobs_to_activate() > 0
 
     def calculate_max_jobs_to_activate(self) -> int:
