@@ -17,6 +17,7 @@ from pyzeebe.task.task import Task
 from pyzeebe.task.task_config import TaskConfig
 from pyzeebe.task.types import AsyncTaskDecorator, DecoratorRunner, JobHandler
 from pyzeebe.types import Variables
+import inspect
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -42,7 +43,7 @@ def build_job_handler(task_function: Function[..., Any], task_config: TaskConfig
             prepared_task_function, task_config, job, job_controller
         )
         await job_controller.set_running_after_decorators_status()
-        job = await after_decorator_runner(job)
+        job = await after_decorator_runner(job, return_variables)
         if succeeded:
             await job_controller.set_success_status(variables=return_variables)
         return job
@@ -89,17 +90,21 @@ async def run_original_task_function(
 
 
 def create_decorator_runner(decorators: Sequence[AsyncTaskDecorator]) -> DecoratorRunner:
-    async def decorator_runner(job: Job) -> Job:
+    async def decorator_runner(job: Job, task_result=None) -> Job:
         for decorator in decorators:
-            job = await run_decorator(decorator, job)
+            job = await run_decorator(decorator, job, task_result)
         return job
 
     return decorator_runner
 
 
-async def run_decorator(decorator: AsyncTaskDecorator, job: Job) -> Job:
+async def run_decorator(decorator: AsyncTaskDecorator, job: Job, task_result) -> Job:
     try:
-        return await decorator(job)
+        args = inspect.signature(decorator).parameters
+        if len(args) == 1:
+            return await decorator(job)
+        else:
+            return await decorator(job, task_result)
     except Exception as e:
         logger.warning("Failed to run decorator %s. Exception: %s", decorator, e, exc_info=True)
         return job

@@ -208,6 +208,49 @@ class TestBuildJobHandler:
         task_config.after.pop().assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_after_decorator_called_with_only_job_param(
+            self,
+            original_task_function: Callable,
+            decorator: TaskDecorator,
+            task_config: TaskConfig,
+            job: Job,
+            mocked_job_controller: JobController,
+    ):
+        self.is_after_callback_called = False
+
+        def after_callback(job):
+            self.is_after_callback_called = True
+
+        task_config.after.append(after_callback)
+        job_handler = task_builder.build_job_handler(original_task_function, task_config)
+
+        await job_handler(job, mocked_job_controller)
+
+        assert self.is_after_callback_called == True
+
+    @pytest.mark.asyncio
+    async def test_after_decorator_called_with_job_and_return_value(
+        self,
+        task_config: TaskConfig,
+        job: Job,
+        mocked_job_controller: JobController,
+    ):
+        async def task_function():
+            return {"result": 1}
+
+        self.variables_inside_decorator = dict()
+        async def after_decorator(job: Job, task_result):
+            self.variables_inside_decorator = task_result
+            return job
+
+        task_config.after.append(after_decorator)
+        job_handler = task_builder.build_job_handler(task_function, task_config)
+
+        await job_handler(job, mocked_job_controller)
+
+        assert self.variables_inside_decorator == {"result": 1}
+
+    @pytest.mark.asyncio
     async def test_failing_decorator_continues(
         self,
         original_task_function: Callable,
